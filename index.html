@@ -109,15 +109,20 @@
         </div>
 
         <div class="btn-group">
-            <button id="btnCheckIn" class="btn-primary" onclick="submitRecord('출근')">출근하기</button>
+            <button id="btnCheckIn" class="btn-primary" onclick="checkGPS('출근')">출근하기</button>
             <button id="btnCheckOut" class="btn-secondary" onclick="submitRecord('퇴근')" disabled>퇴근하기</button>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // [설정] 1단계에서 복사한 구글 앱스 스크립트 URL을 따옴표 안에 넣으세요
+        // [1] 구글 앱스 스크립트 URL
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfEZYW7gZFyBJG6vA4Ee__uJQ6P060_6MNIJ3MdkMw6MznD0BDTu1KsWMks3hQeu9t/exec"; 
+        
+        // [2] 회사 GPS 설정 (여기 숫자를 구글 지도 값으로 바꾸세요!)
+        const COMPANY_LAT = 37.660564;  // 위도 (예: 37.xxx)
+        const COMPANY_LNG = 126.755588; // 경도 (예: 126.xxx)
+        const ALLOWED_DISTANCE = 300; // 허용 반경 (미터 단위)
         // ==========================================
 
         let isWorking = false;
@@ -130,7 +135,69 @@
             loadState();
         });
 
-        // 1. 실시간 시계
+        // ------------------------------------------------
+        // [새로 추가된 기능] GPS 위치 확인 함수
+        // ------------------------------------------------
+        function checkGPS(type) {
+            // 퇴근은 GPS 검사 안 함 (필요하면 이 if문 제거)
+            if (type !== '출근') {
+                submitRecord(type);
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                alert("이 브라우저는 위치 정보를 지원하지 않습니다.");
+                return;
+            }
+
+            // 버튼 로딩 상태 표시
+            setLoading(true);
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+                    
+                    // 거리 계산
+                    const distance = getDistanceFromLatLonInKm(COMPANY_LAT, COMPANY_LNG, userLat, userLng) * 1000;
+                    
+                    setLoading(false); // 로딩 끝
+
+                    if (distance <= ALLOWED_DISTANCE) {
+                        // 거리 통과! 원래 출근 기능 실행
+                        // alert("위치 인증 성공! (거리: " + Math.round(distance) + "m)"); // 필요하면 주석 해제
+                        submitRecord(type);
+                    } else {
+                        alert("🚫 출근 실패: 회사 근처가 아닙니다.\n(현재 거리: " + Math.round(distance) + "m / 허용: " + ALLOWED_DISTANCE + "m)");
+                    }
+                },
+                (error) => {
+                    setLoading(false);
+                    alert("📍 위치 정보를 가져올 수 없습니다. 브라우저의 위치 권한을 '허용'해주세요.");
+                },
+                {
+                    enableHighAccuracy: true, // 정확도 높임
+                    timeout: 5000,            // 5초 안에 못 찾으면 에러
+                    maximumAge: 0             // 캐시된 위치 사용 안 함
+                }
+            );
+        }
+
+        // 거리 계산 공식 (Haversine Formula)
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2 - lat1);
+            var dLon = deg2rad(lon2 - lon1);
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+            return R * c;
+        }
+        function deg2rad(deg) { return deg * (Math.PI / 180); }
+
+
+        // ------------------------------------------------
+        // [기존 기능] 데이터 전송 및 시간 관리
+        // ------------------------------------------------
         function updateClock() {
             const now = new Date();
             const options = { 
@@ -140,17 +207,12 @@
             document.getElementById('liveClock').innerText = now.toLocaleString('ko-KR', options);
         }
 
-        // 2. 구글 시트 전송
         function submitRecord(type) {
             const name = document.getElementById('username').value.trim();
             
             if (!name) {
                 alert("이름을 입력해주세요.");
                 document.getElementById('username').focus();
-                return;
-            }
-            if (!GOOGLE_SCRIPT_URL) {
-                alert("HTML 파일 내부의 GOOGLE_SCRIPT_URL 변수에 주소를 넣어주세요.");
                 return;
             }
 
@@ -181,7 +243,6 @@
             });
         }
 
-        // 3. 상태 변경 로직
         function processStateChange(type) {
             if (type === '출근') {
                 isWorking = true;
@@ -198,15 +259,11 @@
             }
         }
 
-        // UI 업데이트 (수정됨: 이름 입력칸을 비활성화하지 않음)
         function updateUI(working) {
             const btnIn = document.getElementById('btnCheckIn');
             const btnOut = document.getElementById('btnCheckOut');
             const badge = document.getElementById('statusBadge');
             
-            // 주의: 이름 입력칸(nameInput)을 비활성화하는 코드를 제거했습니다.
-            // 이제 출근 중이어도 이름을 수정할 수 있습니다.
-
             if (working) {
                 btnIn.disabled = true;
                 btnIn.classList.replace('btn-primary', 'btn-secondary');
@@ -226,7 +283,6 @@
             }
         }
 
-        // 강제 초기화 기능 (우측 상단 버튼)
         function resetApp() {
             if(confirm("모든 데이터를 초기화하시겠습니까?")) {
                 localStorage.clear();
