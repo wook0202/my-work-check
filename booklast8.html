@@ -488,6 +488,7 @@ input[type="checkbox"] { accent-color: var(--brand-blue); cursor: pointer; width
   z-index: 0;
   overflow: hidden;
   background: #ffffff;
+  filter: blur(38px);
 }
 /* paint canvas */
 #paintCanvas {
@@ -495,12 +496,10 @@ input[type="checkbox"] { accent-color: var(--brand-blue); cursor: pointer; width
   top: 0; left: 0;
   width: 100%; height: 100%;
   pointer-events: none;
-  filter: blur(38px);
-  will-change: transform;
-  z-index: -1;
+  z-index: 0;
 }
 
-.hero-content { position: relative; z-index: 10; }
+.hero-content { position: relative; z-index: 10; isolation: isolate; }
 
 .hero-label {
   display: inline-block;
@@ -1811,10 +1810,14 @@ input[type="checkbox"] { accent-color: var(--brand-blue); cursor: pointer; width
     var lastWidth = 0;
 
     function resize() {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      lastWidth = canvas.offsetWidth;
+      var w = canvas.offsetWidth;
+      var h = canvas.offsetHeight;
+      if (!w || !h) return;
+      canvas.width  = w;
+      canvas.height = h;
+      lastWidth = w;
     }
+
     resize();
 
     /* 모바일에서 스크롤 시 주소창 높이 변화로 resize 이벤트가 발생해
@@ -1829,6 +1832,12 @@ input[type="checkbox"] { accent-color: var(--brand-blue); cursor: pointer; width
           init();
         }
       }, 200);
+    });
+
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && drops && drops.every(function(d) { return !d.active; })) {
+        init();
+      }
     });
 
     /* 물감 팔레트 — 밝고 따뜻한 노란색 + 베이지 계열 */
